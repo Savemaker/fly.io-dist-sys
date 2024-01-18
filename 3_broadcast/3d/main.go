@@ -39,66 +39,73 @@ func main() {
 
 	nodeTopology := make([]string, 0)
 
-	mapToSlice := func() []int {
+	mapToSlice := func(db *map[int]bool) []int {
 		dbMutex.Lock()
 		defer dbMutex.Unlock()
-		slice := make([]int, len(db))
+		len := len(*db)
+		slice := make([]int, len)
 		i := 0
-		for k := range db {
+		for k := range *db {
 			slice[i] = k
 			i = i + 1
 		}
 		return slice
 	}
 
-	replyOk := func(responseType string, msg maelstrom.Message) {
+	replyOk := func(responseType string, msg maelstrom.Message, db *map[int]bool) {
 		response := make(map[string]any)
 
 		response["type"] = responseType
 		if responseType == "read_ok" {
-			response["messages"] = mapToSlice()
+			response["messages"] = mapToSlice(db)
 		}
 		node.Reply(msg, response)
 	}
 
-	go func() {
+	go func(db *map[int]bool) {
 		for {
-			syncReq := make(map[string]any)
-			syncReq["type"] = "sync"
-			syncReq["db"] = mapToSlice()
-			for _, id := range nodeTopology {
-				node.Send(id, syncReq)
-				time.Sleep(time.Millisecond * 100)
+			time.Sleep(time.Millisecond * 52)
+			message := SyncMessage{Type: "sync", Db: mapToSlice(db)}
+			for _, nid := range nodeTopology {
+				if nid != node.ID() {
+					go func(nid string, message SyncMessage) {
+						node.Send(nid, message)
+					}(nid, message)
+				}
 			}
 		}
-	}()
+	}(&db)
 
 	node.Handle("sync", func(msg maelstrom.Message) error {
-		go func(msg maelstrom.Message) {
+		go func(msg maelstrom.Message, db *map[int]bool) {
 			var request SyncMessage
 			if err := json.Unmarshal(msg.Body, &request); err != nil {
 				log.Fatal("reading sync went wrong")
 			}
 			dbMutex.Lock()
+			ref := *db
 			for _, v := range request.Db {
-				db[v] = true
+				ref[v] = true
 			}
 			dbMutex.Unlock()
-		}(msg)
+		}(msg, &db)
 		return nil
 	})
 
 	node.Handle("broadcast", func(msg maelstrom.Message) error {
-		go func(msg maelstrom.Message) {
+		time.Sleep(500 * time.Millisecond)
+		go func(msg maelstrom.Message, db *map[int]bool) {
 			var request BroadcastMessage
 			if err := json.Unmarshal(msg.Body, &request); err != nil {
 				log.Fatal("reading broadcast went wrong")
 			}
 			dbMutex.Lock()
-			db[request.Message] = true
+			ref := *db
+			ref[request.Message] = true
 			dbMutex.Unlock()
-			replyOk("broadcast_ok", msg)
-		}(msg)
+
+			replyOk("broadcast_ok", msg, nil)
+		}(msg, &db)
 		return nil
 	})
 
@@ -108,14 +115,15 @@ func main() {
 			log.Fatal("reading topology went wrong")
 		}
 		nodeTopology = append(nodeTopology, request.Topology[msg.Dest]...)
-		replyOk("topology_ok", msg)
+		replyOk("topology_ok", msg, nil)
 		return nil
 	})
 
 	node.Handle("read", func(msg maelstrom.Message) error {
-		go func() {
-			replyOk("read_ok", msg)
-		}()
+		time.Sleep(500 * time.Millisecond)
+		go func(db *map[int]bool) {
+			replyOk("read_ok", msg, db)
+		}(&db)
 		return nil
 	})
 
