@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"sync"
+	"time"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
@@ -16,7 +17,9 @@ type Request struct {
 func main() {
 	node := maelstrom.NewNode()
 
-	store := maelstrom.NewLinKV(node)
+	store := maelstrom.NewLWWKV(node)
+
+	ctx := context.Background()
 
 	generatorLock := sync.Mutex{}
 
@@ -29,19 +32,40 @@ func main() {
 		return node.ID() + strconv.Itoa(atomicID)
 	}
 
-	node.Handle("txn", func(msg maelstrom.Message) error {
-		var currentDBPointer string
+	initFinished := false
 
-		if currentDBPointerData, err := store.Read(context.Background(), "db"); err == nil {
-			currentDBPointer = currentDBPointerData.(string)
+	node.Handle("txn", func(msg maelstrom.Message) error {
+		if node.ID() == "n0" && !initFinished {
+			store.Write(ctx, "db", "")
+			initFinished = true
 		}
+
+		currentDBPointer := new(string)
+
+		for {
+			if err, backoff := store.ReadInto(ctx, "db", currentDBPointer), 1; err != nil {
+				time.Sleep(time.Duration(backoff) * time.Millisecond)
+				backoff *= 2
+			} else {
+				break
+			}
+		}
+
+		currentDBPointerVal := *currentDBPointer
 
 		newDBPointer := generateID(&generatorLock)
 
 		newDBValue := make(map[int]string)
 
-		if currentDBPointer != "" {
-			store.ReadInto(context.Background(), currentDBPointer, &newDBValue)
+		if currentDBPointerVal != "" {
+			for {
+				if err, backoff := store.ReadInto(ctx, currentDBPointerVal, &newDBValue), 1; err != nil {
+					time.Sleep(time.Duration(backoff) * time.Millisecond)
+					backoff *= 2
+				} else {
+					break
+				}
+			}
 		}
 
 		var body Request
@@ -60,15 +84,21 @@ func main() {
 				val, ok := newDBValue[currentKey]
 				if ok {
 					var actualValues []int
-					if err := store.ReadInto(context.Background(), val, &actualValues); err == nil {
-						transactionResponse = append(transactionResponse, actualValues)
+					for {
+						if err, backoff := store.ReadInto(ctx, val, &actualValues), 1; err != nil {
+							time.Sleep(time.Duration(backoff) * time.Millisecond)
+							backoff *= 2
+						} else {
+							break
+						}
 					}
+					transactionResponse = append(transactionResponse, actualValues)
 				} else {
 					transactionResponse = append(transactionResponse, nil)
 				}
 				transactionResponses = append(transactionResponses, transactionResponse)
 
-			} else if operation == "append" {
+			} else {
 				valueToAppend := int(transaction[2].(float64))
 				transactionResponses = append(transactionResponses, transaction)
 
@@ -77,33 +107,53 @@ func main() {
 				oldValuePointer, ok := newDBValue[currentKey]
 				if ok {
 					var oldValues []int
-					store.ReadInto(context.Background(), oldValuePointer, &oldValues)
+
+					for {
+						if err, backoff := store.ReadInto(ctx, oldValuePointer, &oldValues), 1; err != nil {
+							time.Sleep(time.Duration(backoff) * time.Millisecond)
+							backoff *= 2
+						} else {
+							break
+						}
+					}
 
 					updatedValues := append(oldValues, valueToAppend)
-					store.Write(context.Background(), newValuePointer, updatedValues)
+					store.Write(ctx, newValuePointer, updatedValues)
+
 				} else {
 					newValue := make([]int, 0)
 					newValue = append(newValue, valueToAppend)
-					store.Write(context.Background(), newValuePointer, newValue)
+					store.Write(ctx, newValuePointer, newValue)
 				}
 				newDBValue[currentKey] = newValuePointer
 			}
 		}
 
-		store.Write(context.Background(), newDBPointer, newDBValue)
-
-		if err := store.CompareAndSwap(context.Background(), "db", currentDBPointer, newDBPointer, true); err != nil {
-			return node.Reply(msg, map[string]any{
-				"type": "error",
-				"code": "30",
-				"text": err.Error(),
-			})
-		} else {
-			return node.Reply(msg, map[string]any{
-				"type": "txn_ok",
-				"txn":  transactionResponses,
-			})
+		store.Write(ctx, newDBPointer, newDBValue)
+		for {
+			if err, backoff := store.CompareAndSwap(ctx, "db", currentDBPointerVal, newDBPointer, true), 1; err != nil {
+				switch err := err.(type) {
+				case *maelstrom.RPCError:
+					if err.Code == 22 {
+						return node.Reply(msg, map[string]any{
+							"type": "error",
+							"code": err.Code,
+							"text": err.Error(),
+						})
+					} else {
+						time.Sleep(time.Duration(backoff) * time.Millisecond)
+						backoff *= 2
+					}
+				}
+			} else {
+				break
+			}
 		}
+
+		return node.Reply(msg, map[string]any{
+			"type": "txn_ok",
+			"txn":  transactionResponses,
+		})
 	})
 
 	node.Run()
