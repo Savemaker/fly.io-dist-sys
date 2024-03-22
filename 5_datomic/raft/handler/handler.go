@@ -27,7 +27,7 @@ type ErrorResponse struct {
 func NewRaftHandler(node *maelstrom.Node) RaftHandler {
 	return RaftHandler{
 		node:    node,
-		service: service.NewService(),
+		service: service.NewKVStoreService(),
 	}
 }
 

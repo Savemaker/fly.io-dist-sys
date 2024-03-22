@@ -16,13 +16,13 @@ type KeyValueStoreService interface {
 	CaS(CaSRequestBody) (CaSResponseBody, error)
 }
 
-type Service struct {
+type KVStoreService struct {
 	store map[int]int
 	lock  sync.Mutex
 }
 
-func NewService() *Service {
-	return &Service{
+func NewKVStoreService() *KVStoreService {
+	return &KVStoreService{
 		store: make(map[int]int),
 		lock:  sync.Mutex{},
 	}
@@ -37,7 +37,7 @@ type ReadResponseBody struct {
 	Value int    `json:"value"`
 }
 
-func (service *Service) Read(request ReadRequestBody) (ReadResponseBody, error) {
+func (service *KVStoreService) Read(request ReadRequestBody) (ReadResponseBody, error) {
 	service.lock.Lock()
 	val, ok := service.store[request.Key]
 	service.lock.Unlock()
@@ -57,7 +57,7 @@ type WriteResponseBody struct {
 	Type string `json:"type"`
 }
 
-func (service *Service) Write(request WriteRequestBody) (WriteResponseBody, error) {
+func (service *KVStoreService) Write(request WriteRequestBody) (WriteResponseBody, error) {
 	service.lock.Lock()
 	service.store[request.Key] = request.Value
 	service.lock.Unlock()
@@ -74,7 +74,7 @@ type CaSResponseBody struct {
 	Type string `json:"type"`
 }
 
-func (service *Service) CaS(request CaSRequestBody) (CaSResponseBody, error) {
+func (service *KVStoreService) CaS(request CaSRequestBody) (CaSResponseBody, error) {
 	service.lock.Lock()
 	defer service.lock.Unlock()
 	val, ok := service.store[request.Key]
