@@ -15,7 +15,7 @@ type Handler interface {
 
 type RaftHandler struct {
 	node    *maelstrom.Node
-	service service.KeyValueStoreService
+	kvStore service.KeyValueStoreService
 }
 
 type ErrorResponse struct {
@@ -27,7 +27,7 @@ type ErrorResponse struct {
 func NewRaftHandler(node *maelstrom.Node) RaftHandler {
 	return RaftHandler{
 		node:    node,
-		service: service.NewKVStoreService(),
+		kvStore: service.NewKVStoreService(),
 	}
 }
 
@@ -35,7 +35,7 @@ func (handler *RaftHandler) Read(message *maelstrom.Message) {
 	var request service.ReadRequestBody
 	json.Unmarshal(message.Body, &request)
 
-	response, err := handler.service.Read(request)
+	response, err := handler.kvStore.Read(request)
 
 	if err != nil {
 		handler.handleErrors(err, message)
@@ -48,7 +48,7 @@ func (handler *RaftHandler) Write(message *maelstrom.Message) {
 	var request service.WriteRequestBody
 	json.Unmarshal(message.Body, &request)
 
-	response, err := handler.service.Write(request)
+	response, err := handler.kvStore.Write(request)
 
 	if err != nil {
 		handler.handleErrors(err, message)
@@ -61,7 +61,7 @@ func (handler *RaftHandler) CaS(message *maelstrom.Message) {
 	var request service.CaSRequestBody
 	json.Unmarshal(message.Body, &request)
 
-	response, err := handler.service.CaS(request)
+	response, err := handler.kvStore.CaS(request)
 
 	if err != nil {
 		handler.handleErrors(err, message)
