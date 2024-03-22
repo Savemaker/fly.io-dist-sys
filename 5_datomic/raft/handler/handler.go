@@ -17,6 +17,7 @@ type RaftHandler struct {
 	node    *maelstrom.Node
 	kvStore service.KeyValueStoreService
 	state   service.RaftStateService
+	log     *service.Log
 }
 
 type ErrorResponse struct {
@@ -30,6 +31,7 @@ func NewRaftHandler(node *maelstrom.Node) RaftHandler {
 		node:    node,
 		kvStore: service.NewKVStoreService(),
 		state:   service.NewRaftStateService(),
+		log:     service.NewLog(),
 	}
 }
 
