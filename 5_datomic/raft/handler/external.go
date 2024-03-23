@@ -7,17 +7,9 @@ import (
 	"github.com/savemaker/raft/service"
 )
 
-type Handler interface {
-	Read(message *maelstrom.Message)
-	Write(message *maelstrom.Message)
-	CaS(message *maelstrom.Message)
-}
-
-type RaftHandler struct {
+type ExternalHandler struct {
 	node    *maelstrom.Node
 	kvStore service.KeyValueStoreService
-	state   service.RaftStateService
-	log     *service.Log
 }
 
 type ErrorResponse struct {
@@ -26,16 +18,17 @@ type ErrorResponse struct {
 	Text string `json:"text"`
 }
 
-func NewRaftHandler(node *maelstrom.Node) RaftHandler {
-	return RaftHandler{
+func NewExternalHandler(
+	node *maelstrom.Node,
+	kvStore service.KeyValueStoreService,
+) ExternalHandler {
+	return ExternalHandler{
 		node:    node,
-		kvStore: service.NewKVStoreService(),
-		state:   service.NewRaftStateService(),
-		log:     service.NewLog(),
+		kvStore: kvStore,
 	}
 }
 
-func (handler *RaftHandler) Read(message *maelstrom.Message) {
+func (handler *ExternalHandler) Read(message *maelstrom.Message) {
 	var request service.ReadRequestBody
 	json.Unmarshal(message.Body, &request)
 
@@ -48,7 +41,7 @@ func (handler *RaftHandler) Read(message *maelstrom.Message) {
 	}
 }
 
-func (handler *RaftHandler) Write(message *maelstrom.Message) {
+func (handler *ExternalHandler) Write(message *maelstrom.Message) {
 	var request service.WriteRequestBody
 	json.Unmarshal(message.Body, &request)
 
@@ -61,7 +54,7 @@ func (handler *RaftHandler) Write(message *maelstrom.Message) {
 	}
 }
 
-func (handler *RaftHandler) CaS(message *maelstrom.Message) {
+func (handler *ExternalHandler) CaS(message *maelstrom.Message) {
 	var request service.CaSRequestBody
 	json.Unmarshal(message.Body, &request)
 
@@ -74,7 +67,7 @@ func (handler *RaftHandler) CaS(message *maelstrom.Message) {
 	}
 }
 
-func (handler *RaftHandler) handleErrors(err error, message *maelstrom.Message) {
+func (handler *ExternalHandler) handleErrors(err error, message *maelstrom.Message) {
 	if err != nil {
 		errResponse := new(ErrorResponse)
 
