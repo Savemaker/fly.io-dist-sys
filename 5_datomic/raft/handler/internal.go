@@ -2,14 +2,14 @@ package handler
 
 import (
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
-	"github.com/savemaker/raft/service"
+	leaderelection "github.com/savemaker/raft/service/leader_election"
 )
 
 type InternalHandler struct {
-	stateService service.NodeState
+	stateService *leaderelection.StateService
 }
 
-func NewInternalHandler(stateService service.NodeState) InternalHandler {
+func NewInternalHandler(stateService *leaderelection.StateService) InternalHandler {
 	return InternalHandler{stateService: stateService}
 }
 

@@ -4,6 +4,7 @@ import (
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 	"github.com/savemaker/raft/handler"
 	"github.com/savemaker/raft/service"
+	leaderelection "github.com/savemaker/raft/service/leader_election"
 )
 
 func main() {
@@ -11,13 +12,23 @@ func main() {
 
 	kvStore := service.NewKVStoreService()
 
-	log := service.NewLog()
+	logService := service.NewLogService()
 
-	raftState := service.NewRaftNodeState(node, log)
+	stateService := leaderelection.NewStateService()
+	termService := leaderelection.NewTermService()
+	voteService := leaderelection.NewVoteService()
+
+	leaderelection.NewLeaderElectionSerivce(
+		node,
+		logService,
+		stateService,
+		termService,
+		voteService,
+	)
 
 	externalHandler := handler.NewExternalHandler(node, kvStore)
 
-	internalHandler := handler.NewInternalHandler(raftState)
+	internalHandler := handler.NewInternalHandler(stateService)
 
 	node.Handle("read", func(msg maelstrom.Message) error {
 		go externalHandler.Read(&msg)
