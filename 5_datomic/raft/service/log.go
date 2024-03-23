@@ -36,3 +36,9 @@ func (log *Log) GetLastEntry() LogEntry {
 	defer log.lock.Unlock()
 	return log.Entries[len(log.Entries)-1]
 }
+
+func (log *Log) Size() int {
+	log.lock.Lock()
+	defer log.lock.Unlock()
+	return len(log.Entries)
+}
