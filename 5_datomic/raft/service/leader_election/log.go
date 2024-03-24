@@ -1,9 +1,11 @@
-package service
+package leaderelection
 
-import "sync"
+import (
+	"sync"
+)
 
 type LogEntry struct {
-	Term int
+	Term Term
 	Op   []any
 }
 

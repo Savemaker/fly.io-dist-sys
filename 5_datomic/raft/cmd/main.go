@@ -12,13 +12,12 @@ func main() {
 
 	kvStore := service.NewKVStoreService()
 
-	logService := service.NewLogService()
-
+	logService := leaderelection.NewLogService()
 	stateService := leaderelection.NewStateService()
 	termService := leaderelection.NewTermService()
 	voteService := leaderelection.NewVoteService()
 
-	leaderelection.NewLeaderElectionSerivce(
+	leaderElectionService := leaderelection.NewLeaderElectionSerivce(
 		node,
 		logService,
 		stateService,
@@ -28,7 +27,7 @@ func main() {
 
 	externalHandler := handler.NewExternalHandler(node, kvStore)
 
-	internalHandler := handler.NewInternalHandler(stateService)
+	internalHandler := handler.NewInternalHandler(node, leaderElectionService)
 
 	node.Handle("read", func(msg maelstrom.Message) error {
 		go externalHandler.Read(&msg)

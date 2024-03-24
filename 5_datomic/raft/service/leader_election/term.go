@@ -22,6 +22,12 @@ func (service *TermService) incrementTerm() {
 	service.term += 1
 }
 
+func (service *TermService) advanceTerm(term Term) {
+	service.lock.Lock()
+	defer service.lock.Unlock()
+	service.term = term
+}
+
 func (service *TermService) GetCurentTerm() Term {
 	service.lock.Lock()
 	defer service.lock.Unlock()
